@@ -29,10 +29,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isConnected, setIsCo
     }
 
     try {
-      const issues = await fetchJiraIssues({ domain: jiraDomain, email, token: apiToken });
+      // User might paste url with spaces or extra chars, trim state first for good UX
+      const cleanDomain = jiraDomain.trim();
+      const cleanEmail = email.trim();
+      const cleanToken = apiToken.trim();
+
+      const issues = await fetchJiraIssues({ domain: cleanDomain, email: cleanEmail, token: cleanToken });
+      
       setIssues(issues);
       setIsConnected(true);
       setErrorMsg('');
+      
+      // Update state with cleaned values
+      setJiraDomain(cleanDomain);
+      setEmail(cleanEmail);
+      setApiToken(cleanToken);
+
     } catch (err: any) {
       console.error(err);
       setErrorMsg(err.message);
@@ -69,10 +81,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isConnected, setIsCo
         {!isConnected ? (
           <div className="space-y-4">
              {errorMsg && (
-                <div className="p-4 bg-red-50 text-red-700 text-sm rounded-lg flex items-start gap-3 border border-red-100">
+                <div className={`p-4 text-sm rounded-lg flex items-start gap-3 border ${errorMsg.includes('AĞ HATASI') ? 'bg-orange-50 text-orange-800 border-orange-100' : 'bg-red-50 text-red-700 border-red-100'}`}>
                     <AlertCircle size={20} className="mt-0.5 shrink-0" />
                     <div className="flex flex-col text-left">
-                        <span className="font-bold">Bağlantı Hatası:</span>
+                        <span className="font-bold">Bağlantı Başarısız:</span>
                         <span>{errorMsg}</span>
                     </div>
                 </div>

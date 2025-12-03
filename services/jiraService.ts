@@ -1,80 +1,115 @@
 import { JiraCredentials, Issue } from '../types';
 
+// Proxy List for Failover
+// If one proxy is blocked by company firewall or fails, we try the next one.
+const PROXY_PROVIDERS = [
+  // Primary: Very fast, usually works
+  (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  // Fallback 1: Reliable backup
+  (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+];
+
 export const fetchJiraIssues = async (credentials: JiraCredentials): Promise<Issue[]> => {
   const { domain, email, token } = credentials;
 
-  // URL Formatting: Extract origin only (removes /jira/software etc.)
-  let formattedDomain = domain.trim();
+  // 1. URL CLEANING: Robust logic to strip subpaths like /jira/for-you
+  let targetOrigin = '';
   try {
-    if (!formattedDomain.startsWith('http')) {
-      formattedDomain = `https://${formattedDomain}`;
-    }
-    const urlObj = new URL(formattedDomain);
-    formattedDomain = urlObj.origin; // Keeps only https://company.atlassian.net
+    let rawDomain = domain.trim();
+    if (!rawDomain.startsWith('http')) rawDomain = `https://${rawDomain}`;
+    
+    const urlObj = new URL(rawDomain);
+    targetOrigin = urlObj.origin; // This guarantees 'https://xyz.atlassian.net' only
   } catch (e) {
-    // Fallback simple trim if URL is invalid
-    if (formattedDomain.endsWith('/')) formattedDomain = formattedDomain.slice(0, -1);
+    // Fallback if URL parsing fails completely
+    targetOrigin = domain.trim().replace(/\/+$/, '');
+    if (!targetOrigin.startsWith('http')) targetOrigin = `https://${targetOrigin}`;
   }
 
   const cleanEmail = email.trim();
   const cleanToken = token.trim();
 
-  // Authentication Header
+  // 2. PREPARE REQUEST
   const authHeader = `Basic ${btoa(`${cleanEmail}:${cleanToken}`)}`;
-  
-  // JQL Query
   const jql = 'issuetype in (Bug, Story) AND status not in (Closed) ORDER BY priority DESC';
-  
-  // Proxy URL
-  const targetUrl = `${formattedDomain}/rest/api/3/search?jql=${encodeURIComponent(jql)}&maxResults=50`;
-  const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
+  const jiraApiUrl = `${targetOrigin}/rest/api/3/search?jql=${encodeURIComponent(jql)}&maxResults=50`;
 
-  try {
-    const response = await fetch(proxyUrl, {
-      method: 'GET',
-      headers: {
-        'Authorization': authHeader,
-        'Accept': 'application/json'
-        // Content-Type removed to avoid CORS preflight (OPTIONS) request failure
-      }
-    });
+  // 3. ATTEMPT FETCH WITH FALLBACK PROXIES
+  let lastError: Error | null = null;
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => '');
+  for (const createProxyUrl of PROXY_PROVIDERS) {
+    try {
+      const proxyUrl = createProxyUrl(jiraApiUrl);
       
-      if (response.status === 401 || response.status === 403) {
-        throw new Error('Yetkilendirme hatası: Email veya Token yanlış.');
+      const response = await fetch(proxyUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': authHeader,
+          'Accept': 'application/json',
+          // 'X-Requested-With': 'XMLHttpRequest' // Sometimes helps with proxies
+        }
+      });
+
+      // Handle HTTP Errors specifically
+      if (!response.ok) {
+        // If 401/403, credentials are wrong. DO NOT try next proxy.
+        if (response.status === 401 || response.status === 403) {
+           throw new Error('YETKİ HATASI: Email veya API Token yanlış. Lütfen token izinlerini kontrol edin.');
+        }
+        // If 404, domain is wrong. DO NOT try next proxy.
+        if (response.status === 404) {
+           throw new Error(`ADRES HATASI: "${targetOrigin}" adresinde Jira API bulunamadı. URL'yi kontrol edin.`);
+        }
+        
+        // For 500s or other errors, maybe the proxy is bad, but usually it's the target.
+        // Let's treat 429 (Rate Limit) as a stop as well.
+        if (response.status === 429) {
+           throw new Error('Çok fazla istek yapıldı. Lütfen biraz bekleyin.');
+        }
+
+        throw new Error(`Jira Hatası (${response.status})`);
       }
-      if (response.status === 404) {
-        throw new Error('Jira adresi bulunamadı. Domain ismini kontrol edin.');
+
+      // If we got here, request was successful
+      const data = await response.json();
+
+      // Validate Data Structure
+      if (!data.issues || !Array.isArray(data.issues)) {
+        // If structure is wrong, maybe the proxy returned an error HTML page as JSON?
+        console.warn("Unexpected data structure:", data);
+        throw new Error('Veri formatı hatalı. Jira yanıtı okunamadı.');
+      }
+
+      // 4. TRANSFORM & RETURN
+      return data.issues.map((issue: any) => ({
+        id: issue.key,
+        type: issue.fields.issuetype.name,
+        summary: issue.fields.summary,
+        priority: issue.fields.priority?.name || 'Medium',
+        status: issue.fields.status.name,
+        assignee: issue.fields.assignee ? issue.fields.assignee.displayName : 'Unassigned',
+        created: new Date(issue.fields.created).toLocaleDateString('tr-TR'),
+        description: issue.fields.description
+      }));
+
+    } catch (error: any) {
+      console.warn(`Proxy failed:`, error.message);
+      lastError = error;
+
+      // Critical: If the error was a specific Auth/Domain error we threw above, stop looping.
+      if (error.message.startsWith('YETKİ HATASI') || error.message.startsWith('ADRES HATASI')) {
+        throw error;
       }
       
-      throw new Error(`API Hatası (${response.status}): ${errorText.substring(0, 100)}`);
+      // If it's a network error (Failed to fetch), continue to next proxy
+      continue;
     }
-
-    const data = await response.json();
-
-    if (!data.issues || !Array.isArray(data.issues)) {
-       throw new Error('Jira yanıtı beklenen formatta değil.');
-    }
-
-    // Transform Data
-    return data.issues.map((issue: any) => ({
-      id: issue.key,
-      type: issue.fields.issuetype.name,
-      summary: issue.fields.summary,
-      priority: issue.fields.priority?.name || 'Medium',
-      status: issue.fields.status.name,
-      assignee: issue.fields.assignee ? issue.fields.assignee.displayName : 'Unassigned',
-      created: new Date(issue.fields.created).toLocaleDateString('tr-TR'),
-      description: issue.fields.description
-    }));
-  } catch (error: any) {
-    console.error("Jira Fetch Error:", error);
-    // Network errors (like CORS or AdBlock blocking the proxy)
-    if (error.message === 'Failed to fetch') {
-        throw new Error('Ağ hatası: Proxy servisine erişilemedi. AdBlock veya VPN kapatıp deneyin.');
-    }
-    throw new Error(error.message || 'Jira bağlantısı kurulamadı.');
   }
+
+  // If loop finishes without returning, throw the last error
+  throw new Error(
+    lastError?.message === 'Failed to fetch'
+      ? 'AĞ HATASI: Sunucuya erişilemedi. VPN veya Kurumsal Güvenlik Duvarı bağlantıyı engelliyor olabilir.'
+      : (lastError?.message || 'Bilinmeyen bir bağlantı hatası oluştu.')
+  );
 };
