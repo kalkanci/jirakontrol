@@ -3,11 +3,12 @@ import { JiraCredentials, Issue } from '../types';
 export const fetchJiraIssues = async (credentials: JiraCredentials): Promise<Issue[]> => {
   const { domain, email, token } = credentials;
 
-  // Artık dışarıdaki proxy servislerini değil, kendi Vercel fonksiyonumuzu çağırıyoruz.
-  // Bu istek tarayıcıdan -> bizim sunucumuza (Same Origin) gider.
   try {
     const response = await fetch('/api/proxy', {
       method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify({
         domain,
         email,
@@ -15,20 +16,25 @@ export const fetchJiraIssues = async (credentials: JiraCredentials): Promise<Iss
       }),
     });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      
-      if (response.status === 401 || response.status === 403) {
-         throw new Error('YETKİ HATASI: Email veya API Token yanlış. Lütfen token izinlerini kontrol edin.');
-      }
-      if (response.status === 500 || response.status === 404) {
-         throw new Error('ADRES VEYA SUNUCU HATASI: Jira adresini kontrol edin.');
-      }
-      
-      throw new Error(errorData.error || `Bağlantı Hatası (${response.status})`);
+    // Response JSON değilse patlamaması için text olarak alıp kontrol edelim
+    const responseText = await response.text();
+    
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (e) {
+      throw new Error(`Sunucudan geçersiz yanıt alındı: ${responseText.substring(0, 50)}...`);
     }
 
-    const data = await response.json();
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+         throw new Error('YETKİ HATASI: Email veya API Token yanlış.');
+      }
+      if (response.status === 410 || response.status === 404) {
+         throw new Error('ADRES HATASI: Jira domain adresi hatalı veya API değişmiş.');
+      }
+      throw new Error(data.error || `Bağlantı Hatası (${response.status})`);
+    }
 
     if (!data.issues || !Array.isArray(data.issues)) {
       console.warn("Unexpected data structure:", data);
