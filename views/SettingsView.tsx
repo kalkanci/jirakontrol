@@ -33,16 +33,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isConnected, setIsCo
       setIssues(issues);
       setIsConnected(true);
       setErrorMsg('');
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setErrorMsg('Bağlantı başarısız! (CORS hatası veya yanlış token). Demo moduna geçiliyor.');
-      
-      // Fallback demo mode
-      setTimeout(() => {
-          setIsConnected(true);
-          setIssues(MOCK_ISSUES); 
-          setErrorMsg(''); // Clear error after successful mock connection
-      }, 1500);
+      // Show actual error instead of switching to demo mode
+      setErrorMsg(`Bağlantı başarısız: ${err.message}. Lütfen token ve domain bilgilerinizi kontrol edin.`);
+      setIsConnected(false);
     } finally {
       setLoading(false);
     }
