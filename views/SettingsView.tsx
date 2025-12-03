@@ -35,8 +35,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isConnected, setIsCo
       setErrorMsg('');
     } catch (err: any) {
       console.error(err);
-      // Show actual error instead of switching to demo mode
-      setErrorMsg(`Bağlantı başarısız: ${err.message}. Lütfen token ve domain bilgilerinizi kontrol edin.`);
+      setErrorMsg(err.message);
       setIsConnected(false);
     } finally {
       setLoading(false);
@@ -70,9 +69,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isConnected, setIsCo
         {!isConnected ? (
           <div className="space-y-4">
              {errorMsg && (
-                <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-start gap-2">
-                    <AlertCircle size={16} className="mt-0.5 shrink-0" />
-                    <span>{errorMsg}</span>
+                <div className="p-4 bg-red-50 text-red-700 text-sm rounded-lg flex items-start gap-3 border border-red-100">
+                    <AlertCircle size={20} className="mt-0.5 shrink-0" />
+                    <div className="flex flex-col text-left">
+                        <span className="font-bold">Bağlantı Hatası:</span>
+                        <span>{errorMsg}</span>
+                    </div>
                 </div>
             )}
             

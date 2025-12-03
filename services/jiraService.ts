@@ -3,19 +3,29 @@ import { JiraCredentials, Issue } from '../types';
 export const fetchJiraIssues = async (credentials: JiraCredentials): Promise<Issue[]> => {
   const { domain, email, token } = credentials;
 
-  // URL Formatting
+  // URL Formatting: Extract origin only (removes /jira/software etc.)
   let formattedDomain = domain.trim();
-  if (!formattedDomain.startsWith('http')) formattedDomain = `https://${formattedDomain}`;
-  if (formattedDomain.endsWith('/')) formattedDomain = formattedDomain.slice(0, -1);
+  try {
+    if (!formattedDomain.startsWith('http')) {
+      formattedDomain = `https://${formattedDomain}`;
+    }
+    const urlObj = new URL(formattedDomain);
+    formattedDomain = urlObj.origin; // Keeps only https://company.atlassian.net
+  } catch (e) {
+    // Fallback simple trim if URL is invalid
+    if (formattedDomain.endsWith('/')) formattedDomain = formattedDomain.slice(0, -1);
+  }
+
+  const cleanEmail = email.trim();
+  const cleanToken = token.trim();
 
   // Authentication Header
-  const authHeader = `Basic ${btoa(`${email}:${token}`)}`;
+  const authHeader = `Basic ${btoa(`${cleanEmail}:${cleanToken}`)}`;
   
   // JQL Query
   const jql = 'issuetype in (Bug, Story) AND status not in (Closed) ORDER BY priority DESC';
   
-  // Direct Jira API calls from browser are blocked by CORS policies.
-  // We use a CORS proxy to bypass this restriction for client-side only applications.
+  // Proxy URL
   const targetUrl = `${formattedDomain}/rest/api/3/search?jql=${encodeURIComponent(jql)}&maxResults=50`;
   const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
 
@@ -24,14 +34,22 @@ export const fetchJiraIssues = async (credentials: JiraCredentials): Promise<Iss
       method: 'GET',
       headers: {
         'Authorization': authHeader,
-        'Accept': 'application/json',
-        'Content-Type': 'application/json'
+        'Accept': 'application/json'
+        // Content-Type removed to avoid CORS preflight (OPTIONS) request failure
       }
     });
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => '');
-      throw new Error(`API Hatası (${response.status}): ${errorText.substring(0, 150)}`);
+      
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('Yetkilendirme hatası: Email veya Token yanlış.');
+      }
+      if (response.status === 404) {
+        throw new Error('Jira adresi bulunamadı. Domain ismini kontrol edin.');
+      }
+      
+      throw new Error(`API Hatası (${response.status}): ${errorText.substring(0, 100)}`);
     }
 
     const data = await response.json();
@@ -53,6 +71,10 @@ export const fetchJiraIssues = async (credentials: JiraCredentials): Promise<Iss
     }));
   } catch (error: any) {
     console.error("Jira Fetch Error:", error);
+    // Network errors (like CORS or AdBlock blocking the proxy)
+    if (error.message === 'Failed to fetch') {
+        throw new Error('Ağ hatası: Proxy servisine erişilemedi. AdBlock veya VPN kapatıp deneyin.');
+    }
     throw new Error(error.message || 'Jira bağlantısı kurulamadı.');
   }
 };
