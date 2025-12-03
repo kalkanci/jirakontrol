@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Wifi, Settings, AlertCircle, RefreshCw, LogOut } from 'lucide-react';
+import { Wifi, Settings, AlertCircle, RefreshCw, LogOut, Info } from 'lucide-react';
 import { MOCK_ISSUES } from '../constants';
 import { fetchJiraIssues } from '../services/jiraService';
 import { Issue } from '../types';
@@ -79,7 +79,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isConnected, setIsCo
         </div>
 
         {!isConnected ? (
-          <div className="space-y-4">
+          <div className="space-y-6">
              {errorMsg && (
                 <div className={`p-4 text-sm rounded-lg flex items-start gap-3 border ${errorMsg.includes('AĞ HATASI') ? 'bg-orange-50 text-orange-800 border-orange-100' : 'bg-red-50 text-red-700 border-red-100'}`}>
                     <AlertCircle size={20} className="mt-0.5 shrink-0" />
@@ -89,50 +89,63 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ isConnected, setIsCo
                     </div>
                 </div>
             )}
-            
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Jira URL</label>
-              <input 
-                type="text" 
-                value={jiraDomain}
-                onChange={(e) => setJiraDomain(e.target.value)}
-                placeholder="https://sirketiniz.atlassian.net" 
-                className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all" 
-              />
-              <p className="text-xs text-slate-400 mt-1">Sadece domain kök adresi (örn: https://mycompany.atlassian.net)</p>
+
+            <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 flex items-start gap-3 text-left">
+                <Info className="text-blue-600 mt-0.5 shrink-0" size={20} />
+                <div className="text-sm text-blue-800">
+                    <h4 className="font-bold mb-1">Neden Email Gerekiyor?</h4>
+                    <p className="opacity-90 leading-relaxed">
+                        Jira API güvenliği gereği, API Token tek başına kullanılamaz. Token'ın hangi hesaba ait olduğunu doğrulamak için giriş yaptığınız <b>mail adresiniz</b> zorunludur. Bu yöntem, İkili Doğrulama (2FA) açık olsa bile güvenli giriş yapmanızı sağlar.
+                    </p>
+                </div>
             </div>
             
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Email Adresi</label>
-              <input 
-                type="email" 
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="ad.soyad@sirket.com" 
-                className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all" 
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">API Token</label>
-              <input 
-                type="password" 
-                value={apiToken}
-                onChange={(e) => setApiToken(e.target.value)}
-                placeholder="ATATT3xFfGF0..." 
-                className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all" 
-              />
-              <p className="text-xs text-slate-400 mt-1">
-                <a href="https://id.atlassian.com/manage/api-tokens" target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">
-                  Token oluşturmak için tıklayın
-                </a>
-              </p>
+            <div className="space-y-4">
+                <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Jira URL</label>
+                <input 
+                    type="text" 
+                    value={jiraDomain}
+                    onChange={(e) => setJiraDomain(e.target.value)}
+                    placeholder="https://sirketiniz.atlassian.net" 
+                    className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all" 
+                />
+                <p className="text-xs text-slate-400 mt-1">Sadece domain kök adresi (örn: https://mycompany.atlassian.net)</p>
+                </div>
+                
+                <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Jira Hesap Maili</label>
+                <input 
+                    type="email" 
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="ad.soyad@sirket.com" 
+                    className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all" 
+                />
+                <p className="text-xs text-slate-400 mt-1">Jira'ya giriş yaparken kullandığınız e-posta adresi.</p>
+                </div>
+                
+                <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">API Token</label>
+                <input 
+                    type="password" 
+                    value={apiToken}
+                    onChange={(e) => setApiToken(e.target.value)}
+                    placeholder="ATATT3xFfGF0..." 
+                    className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all" 
+                />
+                <p className="text-xs text-slate-400 mt-1">
+                    <a href="https://id.atlassian.com/manage/api-tokens" target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">
+                    Token oluşturmak için tıklayın
+                    </a>
+                </p>
+                </div>
             </div>
 
             <button 
               onClick={handleConnect}
               disabled={loading}
-              className="w-full mt-6 py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow-sm shadow-indigo-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full mt-2 py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow-sm shadow-indigo-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading ? (
                   <>
