@@ -1,0 +1,5 @@
+{
+  "name": "JiraFocus",
+  "description": "A focused Jira dashboard for tracking bugs and stories with real-time connectivity features.",
+  "requestFramePermissions": []
+}
